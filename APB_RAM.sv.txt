@@ -1,0 +1,74 @@
+// Design of APB_RAM
+
+
+module apb_ram (
+		input logic prstn,
+		input logic pclk,
+		input logic psel,
+		input logic penable,
+		input logic pwrite,
+		input logic [31:0] paddr,
+		input logic [31:0] pwdata,
+		output logic [31:0] prdata,
+		output logic pready,
+		output logic pslverr
+		);
+
+
+	//Memory
+	reg [31:0] MEM [32];
+
+
+	typedef enum {IDLE = 0, SETUP = 1, ACCESS = 2} state_type;
+
+	state_type pr_state, nxt_state;
+
+
+	always @(negedge prstn or posedge pclk) begin
+		if (prstn)	begin pr_state <= IDLE; end
+		else		begin pr_state <= nxt_state; end
+	end
+
+	//Initialize the Memory	
+	always @(negedge prstn) begin
+		for (int i = 0; i < 32; i++) begin
+			MEM[i] <= 0;
+		end
+	end
+
+
+	always_comb begin
+		case(pr_state)
+			IDLE:	begin
+					prdata <= 0; pready <= 0; pslverr <= 0; nxt_state <= SETUP;
+				end
+
+			SETUP:	begin
+					if (psel == 1) 	   begin nxt_state <= ACCESS; end
+					else		   begin nxt_state <= nxt_state; end	
+					
+					prdata <= 0; pready <= 0; pslverr <= 0;	
+				end
+
+			ACCESS:	begin
+					if (penable && pwrite) begin //Write State
+						if (paddr < 32)		begin MEM[paddr] <= pwdata; pready <= 1; end
+						else 			begin pslverr <= 1; pready <= 1;end
+
+						nxt_state <= SETUP;
+
+					end else if (penable && !pwrite) begin //Read State
+						if (paddr < 32)		begin prdata <= MEM[paddr]; pready <= 1; end
+						else			begin pslverr <= 1; pready <= 1; end
+						nxt_state <= SETUP;
+
+					end else begin
+							nxt_state <= nxt_state;
+					end		 
+				end
+
+			default: begin nxt_state <= IDLE; end
+		endcase
+	end
+
+endmodule
